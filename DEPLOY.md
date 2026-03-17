@@ -13,7 +13,7 @@ sudo apt install -y git python3 python3-venv python3-pip nginx
 
 ```bash
 cd /opt
-sudo git clone <URL_ВАШЕГО_РЕПОЗИТОРИЯ> knowledge-rag
+sudo git clone <URL_OF_YOUR_REPOSITORY> knowledge-rag
 sudo chown -R $USER:$USER knowledge-rag
 cd knowledge-rag
 ```
@@ -105,7 +105,7 @@ print(pwd_context.hash("your_admin_password"))
 
 ```sql
 INSERT INTO users (username, password_hash, role)
-VALUES ('admin', '<ХЭШ_ПАРОЛЯ>', 'admin');
+VALUES ('admin', '<PASSWORD_HASH>', 'admin');
 ```
 
 ### 3. Systemd service for Uvicorn
