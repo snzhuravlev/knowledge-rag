@@ -41,10 +41,12 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "Drgh74364")
 DB_NAME = os.getenv("DB_NAME", "claw")
 DB_HOST = os.getenv("DB_HOST", "/var/run/postgresql")
 
-TABLE_NAME = os.getenv("RAG_TABLE_NAME", "my_notebook_data")
+# Default configuration is aligned with the existing public.knowledge_base table.
+TABLE_NAME = os.getenv("RAG_TABLE_NAME", "knowledge_base")
 CONTENT_COLUMN = os.getenv("RAG_CONTENT_COLUMN", "content")
-SOURCE_COLUMN = os.getenv("RAG_SOURCE_COLUMN", "source")
+SOURCE_COLUMN = os.getenv("RAG_SOURCE_COLUMN", "file_path")
 EMBEDDING_COLUMN = os.getenv("RAG_EMBEDDING_COLUMN", "embedding")
+METADATA_COLUMN = os.getenv("RAG_METADATA_COLUMN", "metadata")
 VECTOR_DIM = int(os.getenv("RAG_VECTOR_DIM", "768"))
 SIMILARITY_METRIC = os.getenv("RAG_SIMILARITY_METRIC", "cosine")  # cosine or inner_product
 
@@ -418,16 +420,22 @@ async def index_source(source_id: int) -> None:
             async with conn.transaction():
                 for idx, chunk in enumerate(chunks):
                     emb = await embed_query(chunk)
+                    metadata = {
+                        "source_id": source_id,
+                        "chunk_index": idx,
+                        "title": src["title"],
+                        "original_name": src["original_name"],
+                        "format": src["format"],
+                    }
                     await conn.execute(
                         f"""
-                        INSERT INTO {TABLE_NAME} ({CONTENT_COLUMN}, {SOURCE_COLUMN}, source_id, chunk_index, {EMBEDDING_COLUMN})
-                        VALUES ($1, $2, $3, $4, $5)
+                        INSERT INTO {TABLE_NAME} ({CONTENT_COLUMN}, {SOURCE_COLUMN}, {EMBEDDING_COLUMN}, {METADATA_COLUMN})
+                        VALUES ($1, $2, $3, $4::jsonb)
                         """,
                         chunk,
-                        src["title"],
-                        source_id,
-                        idx,
+                        src["file_path"],
                         emb,
+                        json.dumps(metadata),
                     )
                     inserted += 1
 
@@ -622,7 +630,11 @@ async def delete_source(
             "SELECT file_path FROM sources WHERE id = $1",
             source_id,
         )
-        await conn.execute("DELETE FROM my_notebook_data WHERE source_id = $1", source_id)
+        # Remove related chunks from the shared knowledge_base by matching on metadata.source_id
+        await conn.execute(
+            f"DELETE FROM {TABLE_NAME} WHERE {METADATA_COLUMN} ->> 'source_id' = $1::text",
+            str(source_id),
+        )
         await conn.execute("DELETE FROM sources WHERE id = $1", source_id)
     if src and src["file_path"]:
         try:
