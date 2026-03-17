@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Local RAG Chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-50">
+    <div class="flex flex-col min-h-screen">
+      <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+        <div class="mx-auto max-w-5xl px-4 py-4 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="h-7 w-7 rounded-lg bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600 shadow-lg shadow-cyan-500/40"></div>
+            <div>
+              <div class="text-sm font-semibold tracking-wide text-slate-100 uppercase">
+                Local RAG
+              </div>
+              <div class="text-xs text-slate-400">
+                PostgreSQL · Gemini · pgvector
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="flex-1">
+        <div class="mx-auto max-w-5xl px-4 py-6 grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+          <section
+            class="flex flex-col rounded-2xl border border-slate-800/80 bg-slate-900/70 shadow-[0_20px_80px_rgba(15,23,42,0.9)]"
+          >
+            <div class="border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+              <h1 class="text-sm font-semibold text-slate-100">
+                Чат с базой знаний
+              </h1>
+              <span
+                id="status-indicator"
+                class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300 border border-emerald-500/30"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Готов
+              </span>
+            </div>
+
+            <div
+              id="chat"
+              class="flex-1 space-y-4 overflow-y-auto px-4 py-4 text-sm leading-relaxed text-slate-100"
+            >
+              <div class="flex gap-3">
+                <div class="mt-1 h-7 w-7 rounded-full bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600"></div>
+                <div class="space-y-1">
+                  <div class="text-xs font-medium text-slate-300">Ассистент</div>
+                  <div class="prose prose-invert prose-xs max-w-none text-slate-200">
+                    Задайте вопрос, связанный с вашей базой знаний. Ответ будет
+                    сгенерирован на основе данных из PostgreSQL и модели Gemini.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <form id="chat-form" class="border-t border-slate-800 px-4 py-3 space-y-3">
+              <div
+                class="flex items-end gap-2 rounded-xl border border-slate-700/80 bg-slate-900/80 px-3 py-2 focus-within:border-sky-500/70 focus-within:ring-1 focus-within:ring-sky-500/40"
+              >
+                <textarea
+                  id="query-input"
+                  rows="1"
+                  placeholder="Спросите что-нибудь по вашим заметкам..."
+                  class="block w-full resize-none border-0 bg-transparent p-0 text-sm text-slate-100 placeholder-slate-500 focus:ring-0"
+                ></textarea>
+                <button
+                  id="submit-btn"
+                  type="submit"
+                  class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg shadow-sky-500/40 transition hover:bg-sky-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    class="h-4 w-4"
+                  >
+                    <path
+                      d="M3.106 2.553a.75.75 0 0 1 .854-.53l13 2.5a.75.75 0 0 1 .237 1.37l-5.4 3.6a.75.75 0 0 0-.158 1.137l3.985 4.384a.75.75 0 0 1-.917 1.157l-12-8.5a.75.75 0 0 1 .187-1.314l4.818-1.83-3.233-.622a.75.75 0 0 1-.553-.852Z"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <p id="helper-text" class="text-[11px] text-slate-500">
+                Ваши данные не покидают локальную инфраструктуру; в облако отправляется только текст
+                запроса и выбранные контексты.
+              </p>
+            </form>
+          </section>
+
+          <aside
+            class="flex flex-col rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4 text-sm text-slate-100"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="text-xs font-semibold uppercase tracking-wide text-slate-300">
+                Источники
+              </h2>
+              <button
+                id="toggle-sources"
+                type="button"
+                class="text-[11px] font-medium text-slate-400 hover:text-slate-200"
+              >
+                Свернуть
+              </button>
+            </div>
+            <div id="sources-empty" class="mt-4 text-xs text-slate-500">
+              Источники будут показаны после первого ответа.
+            </div>
+            <div
+              id="sources-list"
+              class="mt-2 hidden space-y-3 overflow-y-auto text-xs text-slate-100"
+            ></div>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      const chatEl = document.getElementById("chat");
+      const formEl = document.getElementById("chat-form");
+      const inputEl = document.getElementById("query-input");
+      const submitBtn = document.getElementById("submit-btn");
+      const statusEl = document.getElementById("status-indicator");
+      const helperTextEl = document.getElementById("helper-text");
+      const sourcesListEl = document.getElementById("sources-list");
+      const sourcesEmptyEl = document.getElementById("sources-empty");
+      const toggleSourcesBtn = document.getElementById("toggle-sources");
+      const PAGE_SIZE = 5;
+      let authToken = null;
+      let currentUser = null;
+      let currentSources = [];
+      let currentPage = 1;
+
+      function appendMessage(role, text, { append = false } = {}) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "flex gap-3";
+
+        const avatar = document.createElement("div");
+        avatar.className =
+          "mt-1 h-7 w-7 rounded-full " +
+          (role === "user"
+            ? "bg-slate-700"
+            : "bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600");
+
+        const contentWrapper = document.createElement("div");
+        contentWrapper.className = "space-y-1";
+
+        const label = document.createElement("div");
+        label.className = "text-xs font-medium text-slate-300";
+        label.textContent = role === "user" ? "Вы" : "Ассистент";
+
+        const bubble = document.createElement("div");
+        bubble.className =
+          "prose prose-invert prose-xs max-w-none whitespace-pre-wrap text-slate-200";
+        if (append) {
+          bubble.textContent = "";
+        }
+        bubble.textContent = (append ? bubble.textContent + text : text);
+
+        contentWrapper.appendChild(label);
+        contentWrapper.appendChild(bubble);
+
+        wrapper.appendChild(avatar);
+        wrapper.appendChild(contentWrapper);
+
+        chatEl.appendChild(wrapper);
+        chatEl.scrollTop = chatEl.scrollHeight;
+
+        return bubble;
+      }
+
+      function setLoading(isLoading) {
+        submitBtn.disabled = isLoading;
+        if (isLoading) {
+          statusEl.textContent = "";
+          statusEl.insertAdjacentHTML(
+            "beforeend",
+            '<span class="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse"></span><span class="ml-1">Обработка...</span>',
+          );
+          helperTextEl.textContent = "Ищем релевантные фрагменты и генерируем ответ...";
+        } else {
+          statusEl.textContent = "";
+          statusEl.insertAdjacentHTML(
+            "beforeend",
+            '<span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span class="ml-1">Готов</span>',
+          );
+          helperTextEl.textContent =
+            "Ваши данные не покидают локальную инфраструктуру; в облако отправляется только текст запроса и выбранные контексты.";
+        }
+      }
+
+      async function apiFetch(url, options = {}) {
+        const headers = options.headers || {};
+        if (authToken) {
+          headers["Authorization"] = `Bearer ${authToken}`;
+        }
+        return fetch(url, { ...options, headers });
+      }
+
+      function renderSourcesPage() {
+        sourcesListEl.innerHTML = "";
+        if (!currentSources.length) {
+          sourcesEmptyEl.classList.remove("hidden");
+          sourcesListEl.classList.add("hidden");
+          return;
+        }
+
+        sourcesEmptyEl.classList.add("hidden");
+        sourcesListEl.classList.remove("hidden");
+
+        const start = (currentPage - 1) * PAGE_SIZE;
+        const pageItems = currentSources.slice(start, start + PAGE_SIZE);
+
+        pageItems.forEach((src, i) => {
+          const idx = start + i;
+          const card = document.createElement("article");
+          card.className =
+            "rounded-xl border border-slate-700/70 bg-slate-900/80 px-3 py-2 shadow-sm";
+
+          const header = document.createElement("div");
+          header.className = "flex items-center justify-between gap-2";
+
+          const title = document.createElement("div");
+          title.className = "text-[11px] font-semibold text-slate-200";
+          title.textContent = `Источник ${idx + 1}`;
+
+          const meta = document.createElement("div");
+          meta.className = "text-[10px] text-slate-500";
+          const score = typeof src.score === "number" ? src.score.toFixed(3) : "–";
+          meta.textContent = `score ${score}`;
+
+          header.appendChild(title);
+          header.appendChild(meta);
+
+          const sourceLine = document.createElement("div");
+          sourceLine.className = "mt-1 text-[10px] text-slate-400 truncate";
+          sourceLine.textContent = src.source || "Без дополнительной метаинформации";
+
+          const content = document.createElement("p");
+          content.className =
+            "mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap text-[11px] text-slate-200";
+          content.textContent = src.content;
+
+          card.appendChild(header);
+          card.appendChild(sourceLine);
+          card.appendChild(content);
+
+          sourcesListEl.appendChild(card);
+        });
+
+        if (currentSources.length > PAGE_SIZE) {
+          const controls = document.createElement("div");
+          controls.className = "mt-2 flex items-center justify-between text-[11px] text-slate-400";
+
+          const info = document.createElement("div");
+          const totalPages = Math.ceil(currentSources.length / PAGE_SIZE);
+          info.textContent = `Страница ${currentPage} из ${totalPages}`;
+
+          const buttons = document.createElement("div");
+          buttons.className = "inline-flex gap-1";
+
+          const prevBtn = document.createElement("button");
+          prevBtn.type = "button";
+          prevBtn.textContent = "Назад";
+          prevBtn.className =
+            "rounded-full border border-slate-700 px-2 py-0.5 disabled:opacity-40 hover:border-slate-500";
+          prevBtn.disabled = currentPage === 1;
+          prevBtn.onclick = () => {
+            if (currentPage > 1) {
+              currentPage -= 1;
+              renderSourcesPage();
+            }
+          };
+
+          const nextBtn = document.createElement("button");
+          nextBtn.type = "button";
+          nextBtn.textContent = "Вперёд";
+          nextBtn.className =
+            "rounded-full border border-slate-700 px-2 py-0.5 disabled:opacity-40 hover:border-slate-500";
+          const totalPages2 = Math.ceil(currentSources.length / PAGE_SIZE);
+          nextBtn.disabled = currentPage >= totalPages2;
+          nextBtn.onclick = () => {
+            const maxPage = Math.ceil(currentSources.length / PAGE_SIZE);
+            if (currentPage < maxPage) {
+              currentPage += 1;
+              renderSourcesPage();
+            }
+          };
+
+          buttons.appendChild(prevBtn);
+          buttons.appendChild(nextBtn);
+          controls.appendChild(info);
+          controls.appendChild(buttons);
+          sourcesListEl.appendChild(controls);
+        }
+      }
+
+      function setSources(sources) {
+        currentSources = Array.isArray(sources) ? sources : [];
+        currentPage = 1;
+        renderSourcesPage();
+      }
+
+      toggleSourcesBtn.addEventListener("click", () => {
+        const isHidden = sourcesListEl.classList.contains("hidden") && sourcesEmptyEl.classList.contains("hidden");
+        if (isHidden) {
+          sourcesListEl.classList.remove("hidden");
+          toggleSourcesBtn.textContent = "Свернуть";
+        } else {
+          sourcesListEl.classList.add("hidden");
+          sourcesEmptyEl.classList.add("hidden");
+          toggleSourcesBtn.textContent = "Показать";
+        }
+      });
+
+      formEl.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const query = inputEl.value.trim();
+        if (!query) return;
+
+        appendMessage("user", query);
+        inputEl.value = "";
+        setLoading(true);
+
+        if (!authToken) {
+          appendMessage("assistant", "Необходимо войти в систему перед использованием чата.");
+          setLoading(false);
+          inputEl.focus();
+          return;
+        }
+
+        try {
+          const source = new EventSourcePolyfill("/api/chat-stream", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            },
+            body: JSON.stringify({ query }),
+          });
+
+          let answerBubble = null;
+          let accumulated = "";
+
+          source.onmessage = (event) => {
+            try {
+              const payload = JSON.parse(event.data);
+              if (payload.type === "meta") {
+                setSources(payload.sources || []);
+                return;
+              }
+              if (payload.type === "delta") {
+                if (!answerBubble) {
+                  answerBubble = appendMessage("assistant", "", { append: true });
+                }
+                accumulated += payload.text || "";
+                answerBubble.textContent = accumulated;
+                chatEl.scrollTop = chatEl.scrollHeight;
+                return;
+              }
+              if (payload.type === "done") {
+                source.close();
+              }
+            } catch (e) {
+              // ignore malformed events
+            }
+          };
+
+          source.onerror = () => {
+            source.close();
+            setLoading(false);
+          };
+        } catch (err) {
+          appendMessage("assistant", `Не удалось выполнить запрос: ${err}`);
+          setLoading(false);
+        } finally {
+          inputEl.focus();
+        }
+      });
+
+      inputEl.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          formEl.requestSubmit();
+        }
+      });
+
+      class EventSourcePolyfill {
+        constructor(url, options = {}) {
+          this.url = url;
+          this.options = options;
+          this.controller = new AbortController();
+          this.onmessage = null;
+          this.onerror = null;
+          this._connect();
+        }
+
+        async _connect() {
+          try {
+            const resp = await fetch(this.url, {
+              method: this.options.method || "GET",
+              headers: this.options.headers || {},
+              body: this.options.body,
+              signal: this.controller.signal,
+            });
+
+            if (!resp.ok || !resp.body) {
+              if (this.onerror) this.onerror(new Error(`HTTP ${resp.status}`));
+              return;
+            }
+
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buffer = "";
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+
+              let index;
+              while ((index = buffer.indexOf("\n\n")) !== -1) {
+                const rawEvent = buffer.slice(0, index).trim();
+                buffer = buffer.slice(index + 2);
+                if (!rawEvent) continue;
+
+                const lines = rawEvent.split("\n");
+                let data = "";
+                for (const line of lines) {
+                  if (line.startsWith("data:")) {
+                    data += line.slice(5).trim();
+                  }
+                }
+                if (data && this.onmessage) {
+                  this.onmessage({ data });
+                }
+              }
+            }
+          } catch (err) {
+            if (this.onerror) this.onerror(err);
+          }
+        }
+
+        close() {
+          this.controller.abort();
+        }
+      }
+
+      async function handleLogin(username, password) {
+        const body = new URLSearchParams();
+        body.set("username", username);
+        body.set("password", password);
+        body.set("grant_type", "password");
+
+        const resp = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body,
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        authToken = data.access_token;
+        localStorage.setItem("rag_token", authToken);
+
+        const meResp = await apiFetch("/auth/me");
+        if (meResp.ok) {
+          currentUser = await meResp.json();
+        }
+      }
+
+      async function initAuth() {
+        const saved = localStorage.getItem("rag_token");
+        if (saved) {
+          authToken = saved;
+          try {
+            const meResp = await apiFetch("/auth/me");
+            if (meResp.ok) {
+              currentUser = await meResp.json();
+            } else {
+              authToken = null;
+              currentUser = null;
+              localStorage.removeItem("rag_token");
+            }
+          } catch {
+            authToken = null;
+            currentUser = null;
+          }
+        }
+      }
+
+      initAuth();
+    </script>
+  </body>
+</html>
+
