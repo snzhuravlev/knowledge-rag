@@ -1,25 +1,25 @@
 # Local RAG UI (FastAPI + PostgreSQL + Gemini)
 
-Минималистичный веб-интерфейс для локальной RAG-системы:
+Minimalist web interface for a local RAG system:
 
-- Backend: FastAPI + asyncpg + PostgreSQL с pgvector.
-- Хранение чанков в таблице `my_notebook_data`.
-- Эмбеддинги: `google/text-embedding-004`.
-- Генерация ответов: `google/gemini-flash-latest`.
-- Веб-UI: Tailwind, чат + список источников, стриминг ответов.
-- Роли пользователей: `admin`, `reader`.
+- Backend: FastAPI + asyncpg + PostgreSQL with pgvector.
+- Chunk storage in the `my_notebook_data` table.
+- Embeddings: `google/text-embedding-004`.
+- Answer generation: `google/gemini-flash-latest`.
+- Web UI: Tailwind, chat + sources list, streaming answers.
+- User roles: `admin`, `reader`.
 
-## Структура проекта
+## Project structure
 
-- `app/main.py` — FastAPI-приложение, авторизация, чат, CRUD по источникам, индексация.
-- `static/index.html` — фронтенд (чат, отображение источников, базовая работа с токеном).
-- `requirements.txt` — зависимости.
-- `.env.example` — пример настроек окружения.
-- `DEPLOY.md` — подробная инструкция по деплою под `knowledge.home.arpa`.
+- `app/main.py` — FastAPI application, authentication, chat, CRUD for sources, indexing.
+- `static/index.html` — frontend (chat, sources display, basic token handling).
+- `requirements.txt` — dependencies.
+- `.env.example` — example environment configuration.
+- `DEPLOY.md` — detailed deployment guide for `knowledge.home.arpa`.
 
-## Настройка окружения
+## Environment setup
 
-1. Создать виртуальное окружение:
+1. Create a virtual environment:
 
 ```bash
 python3 -m venv .venv
@@ -28,73 +28,73 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-2. Создать `.env`:
+2. Create `.env`:
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Ключевые переменные:
+Key environment variables:
 
-- `GOOGLE_API_KEY` — ключ Gemini API.
-- `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_HOST` — доступ к PostgreSQL.
-- `AUTH_SECRET_KEY` — секрет для подписи JWT.
-- `RAG_TABLE_NAME` и другие `RAG_*` — имена таблиц/колонок и параметры векторного поиска.
+- `GOOGLE_API_KEY` — Gemini API key.
+- `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_HOST` — PostgreSQL connection settings.
+- `AUTH_SECRET_KEY` — secret key for signing JWT.
+- `RAG_TABLE_NAME` and other `RAG_*` — table/column names and vector search parameters.
 
-3. Настроить БД (расширение pgvector, таблицы `users`, `sources`, `my_notebook_data`). SQL-примеры — в `DEPLOY.md`.
+3. Configure the database (pgvector extension, `users`, `sources`, `my_notebook_data` tables). SQL examples are in `DEPLOY.md`.
 
-## Запуск в dev-режиме
+## Running in dev mode
 
 ```bash
 source .venv/bin/activate
 uvicorn app.main:app --reload
 ```
 
-Интерфейс будет доступен по адресу:
+The interface will be available at:
 
 - `http://127.0.0.1:8000/`
 
-## Роли и аутентификация
+## Roles and authentication
 
 - `admin`:
-  - может загружать новые источники (книги/документы),
-  - управлять ими (редактировать заголовок, удалять),
-  - использовать чат.
+  - can upload new sources (books/documents),
+  - manage them (edit title, delete),
+  - use the chat.
 - `reader`:
-  - может только использовать чат и просматривать список источников.
+  - can only use the chat and view the list of sources.
 
-Токены:
+Tokens:
 
-- Эндпоинт логина: `POST /auth/login` (OAuth2 Password Flow).
-- Эндпоинт профиля: `GET /auth/me`.
+- Login endpoint: `POST /auth/login` (OAuth2 Password Flow).
+- Profile endpoint: `GET /auth/me`.
 
-## Индексация источников
+## Source indexing
 
-- Файл (или архив) загружается через эндпоинт `POST /api/sources` (для admin).
-- Поддерживаемые форматы: `pdf`, `docx`, `epub`, `fb2`, `txt` (по расширению файла).
-- Текст извлекается, нормализуется и режется на чанки.
-- Для каждого чанка вычисляется эмбеддинг и создаётся запись в `my_notebook_data`.
-- Статус источника:
-  - `pending` → создан, ждёт индексации;
-  - `indexing` → идёт обработка;
-  - `ready` → полностью проиндексирован;
-  - `failed` → ошибка, текст ошибки сохраняется в `error_message`.
+- A file (or archive) is uploaded via `POST /api/sources` (for admin).
+- Supported formats: `pdf`, `docx`, `epub`, `fb2`, `txt` (by file extension).
+- Text is extracted, normalized, and split into chunks.
+- For each chunk, an embedding is computed and a record is created in `my_notebook_data`.
+- Source status:
+  - `pending` → created, waiting for indexing;
+  - `indexing` → processing in progress;
+  - `ready` → fully indexed;
+  - `failed` → error occurred, error message is stored in `error_message`.
 
-Индексация запускается в фоне (`BackgroundTasks`) после загрузки.
+Indexing is started in the background (`BackgroundTasks`) after upload.
 
-## Использование чата
+## Chat usage
 
-- Чат-эндпоинты:
-  - `POST /api/chat` — классический запрос/ответ.
-  - `POST /api/chat-stream` — стриминговый ответ (Server-Sent Events).
-- Чат требует авторизации (роль `reader` или `admin`).
+- Chat endpoints:
+  - `POST /api/chat` — classic request/response.
+  - `POST /api/chat-stream` — streaming responses (Server-Sent Events).
+- Chat requires authorization (role `reader` or `admin`).
 - UI:
-  - поле ввода запроса,
-  - потоковый ответ ассистента,
-  - панель источников с пагинацией.
+  - input field for the query,
+  - streaming assistant response,
+  - sources panel with pagination.
 
-## Деплой
+## Deployment
 
-Подробная инструкция (Ubuntu 24.04, домен `knowledge.home.arpa`, Nginx, self-signed SSL, systemd-сервис) — в файле `DEPLOY.md`.
+A detailed guide (Ubuntu 24.04, `knowledge.home.arpa` domain, Nginx, self-signed SSL, systemd service) is in `DEPLOY.md`.
 
