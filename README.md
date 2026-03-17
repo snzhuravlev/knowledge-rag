@@ -3,7 +3,7 @@
 Minimalist web interface for a local RAG system:
 
 - Backend: FastAPI + asyncpg + PostgreSQL with pgvector.
-- Chunk storage in the `my_notebook_data` table.
+- Chunk storage in the `knowledge_base` table.
 - Embeddings: `google/text-embedding-004`.
 - Answer generation: `google/gemini-flash-latest`.
 - Web UI: Tailwind, chat + sources list, streaming answers.
@@ -42,7 +42,7 @@ Key environment variables:
 - `AUTH_SECRET_KEY` — secret key for signing JWT.
 - `RAG_TABLE_NAME` and other `RAG_*` — table/column names and vector search parameters.
 
-3. Configure the database (pgvector extension, `users`, `sources`, `my_notebook_data` tables). SQL examples are in `DEPLOY.md`.
+3. Configure the database (pgvector extension, `users`, `sources`, `knowledge_base` tables). SQL examples are in `DEPLOY.md`.
 
 ## Running in dev mode
 
@@ -74,7 +74,7 @@ Tokens:
 - A file (or archive) is uploaded via `POST /api/sources` (for admin).
 - Supported formats: `pdf`, `docx`, `epub`, `fb2`, `txt` (by file extension).
 - Text is extracted, normalized, and split into chunks.
-- For each chunk, an embedding is computed and a record is created in `my_notebook_data`.
+- For each chunk, an embedding is computed and a record is created in `knowledge_base` (with JSON metadata linking back to the source).
 - Source status:
   - `pending` → created, waiting for indexing;
   - `indexing` → processing in progress;

@@ -76,21 +76,19 @@ CREATE TABLE sources (
 );
 ```
 
-4. Table with chunks (`my_notebook_data`) using pgvector:
+4. Table with chunks (`knowledge_base`) using pgvector:
 
 ```sql
-CREATE TABLE my_notebook_data (
-    id           SERIAL PRIMARY KEY,
-    content      TEXT NOT NULL,
-    source       TEXT,
-    source_id    INTEGER REFERENCES sources(id) ON DELETE CASCADE,
-    chunk_index  INTEGER,
-    section_title TEXT,
-    embedding    VECTOR(768)
+CREATE TABLE knowledge_base (
+    id        SERIAL PRIMARY KEY,
+    file_path TEXT,
+    content   TEXT,
+    embedding VECTOR(768),
+    metadata  JSONB
 );
 
-CREATE INDEX my_notebook_data_embedding_idx
-    ON my_notebook_data
+CREATE INDEX knowledge_base_embedding_idx
+    ON knowledge_base
     USING ivfflat (embedding vector_cosine_ops)
     WITH (lists = 100);
 ```
