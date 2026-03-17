@@ -1,15 +1,15 @@
-## Деплой RAG-сервиса на Ubuntu 24.04 с доменом `knowledge.home.arpa`
+## Deploying the RAG service on Ubuntu 24.04 with the `knowledge.home.arpa` domain
 
-### 1. Подготовка сервера
+### 1. Server preparation
 
-1. Установить зависимости:
+1. Install dependencies:
 
 ```bash
 sudo apt update
 sudo apt install -y git python3 python3-venv python3-pip nginx
 ```
 
-2. Клонировать проект:
+2. Clone the project:
 
 ```bash
 cd /opt
@@ -18,18 +18,18 @@ sudo chown -R $USER:$USER knowledge-rag
 cd knowledge-rag
 ```
 
-3. Создать и заполнить `.env`:
+3. Create and fill in `.env`:
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-- Указать реальный `GOOGLE_API_KEY`.
-- Настроить параметры PostgreSQL.
-- Задать `AUTH_SECRET_KEY` (случайная длинная строка).
+- Set a real `GOOGLE_API_KEY`.
+- Configure PostgreSQL parameters.
+- Set `AUTH_SECRET_KEY` (a random long string).
 
-4. Создать виртуальное окружение и установить зависимости:
+4. Create a virtual environment and install dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -39,15 +39,15 @@ pip install -r requirements.txt
 deactivate
 ```
 
-### 2. Настройка PostgreSQL и схемы БД
+### 2. PostgreSQL and DB schema setup
 
-1. Включить pgvector и создать расширение (если ещё не сделано):
+1. Enable pgvector and create the extension (if not already done):
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-2. Создать таблицу пользователей:
+2. Create the users table:
 
 ```sql
 CREATE TABLE users (
@@ -59,7 +59,7 @@ CREATE TABLE users (
 );
 ```
 
-3. Создать таблицу источников:
+3. Create the sources table:
 
 ```sql
 CREATE TABLE sources (
@@ -76,7 +76,7 @@ CREATE TABLE sources (
 );
 ```
 
-4. Таблица с чанками (`my_notebook_data`) с pgvector:
+4. Table with chunks (`my_notebook_data`) using pgvector:
 
 ```sql
 CREATE TABLE my_notebook_data (
@@ -95,7 +95,7 @@ CREATE INDEX my_notebook_data_embedding_idx
     WITH (lists = 100);
 ```
 
-5. Создать первого администратора (пароль нужно захешировать через Python/Passlib или временную утилиту):
+5. Create the first admin user (the password must be hashed via Python/Passlib or a temporary utility):
 
 ```python
 from passlib.context import CryptContext
@@ -108,9 +108,9 @@ INSERT INTO users (username, password_hash, role)
 VALUES ('admin', '<ХЭШ_ПАРОЛЯ>', 'admin');
 ```
 
-### 3. Systemd-сервис для Uvicorn
+### 3. Systemd service for Uvicorn
 
-Создать файл `/etc/systemd/system/knowledge-rag.service`:
+Create `/etc/systemd/system/knowledge-rag.service`:
 
 ```ini
 [Unit]
@@ -131,7 +131,7 @@ RestartSec=3
 WantedBy=multi-user.target
 ```
 
-Затем:
+Then:
 
 ```bash
 sudo systemctl daemon-reload
@@ -140,18 +140,18 @@ sudo systemctl start knowledge-rag
 sudo systemctl status knowledge-rag
 ```
 
-### 4. DNS и Nginx под `knowledge.home.arpa`
+### 4. DNS and Nginx for `knowledge.home.arpa`
 
 #### DNS
 
-- На внутреннем DNS-сервере создать запись:
-  - Тип: `A`
-  - Имя: `knowledge.home.arpa`
-  - Значение: внутренний IP Ubuntu-сервера.
+- On the internal DNS server create a record:
+  - Type: `A`
+  - Name: `knowledge.home.arpa`
+  - Value: internal IP of the Ubuntu server.
 
 #### Nginx (reverse proxy)
 
-Создать `/etc/nginx/sites-available/knowledge-rag`:
+Create `/etc/nginx/sites-available/knowledge-rag`:
 
 ```nginx
 server {
@@ -177,7 +177,7 @@ server {
 }
 ```
 
-Включить сайт:
+Enable the site:
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/knowledge-rag /etc/nginx/sites-enabled/knowledge-rag
@@ -185,7 +185,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 5. Self-signed SSL для `knowledge.home.arpa`
+### 5. Self-signed SSL for `knowledge.home.arpa`
 
 ```bash
 sudo mkdir -p /etc/nginx/self-signed
@@ -201,9 +201,9 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Сертификат нужно импортировать в доверенные в браузерах/клиентских ОС, если вы хотите избавиться от предупреждений.
+The certificate must be imported into trusted certificates in browsers/client OSes if you want to get rid of warnings.
 
-### 6. Обновление приложения
+### 6. Updating the application
 
 ```bash
 cd /opt/knowledge-rag
