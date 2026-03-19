@@ -12,6 +12,7 @@ Minimalist web interface for a local RAG system:
 ## Project structure
 
 - `app/main.py` — FastAPI application, authentication, chat, CRUD for sources, indexing.
+- `app/config.py` — centralized application settings (env loading, defaults, logging config).
 - `static/index.html` — frontend (chat, sources display, basic token handling).
 - `requirements.txt` — dependencies.
 - `.env.example` — example environment configuration.
@@ -41,6 +42,20 @@ Key environment variables:
 - `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_HOST` — PostgreSQL connection settings.
 - `AUTH_SECRET_KEY` — secret key for signing JWT.
 - `RAG_TABLE_NAME` and other `RAG_*` — table/column names and vector search parameters.
+
+## Configuration reference
+
+Core settings are loaded from environment variables in `app/config.py`.
+
+- `GOOGLE_API_KEY` / `GEMINI_API_KEY` — API key for Gemini.
+- `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_HOST` — database connection settings.
+- `RAG_TABLE_NAME` (default `knowledge_base`) — table with chunks/embeddings.
+- `RAG_CONTENT_COLUMN`, `RAG_SOURCE_COLUMN`, `RAG_EMBEDDING_COLUMN`, `RAG_METADATA_COLUMN` — column mapping for RAG reads/writes.
+- `RAG_VECTOR_DIM` (default `768`) and `RAG_SIMILARITY_METRIC` (`cosine` or `inner_product`) — retrieval behavior.
+- `EMBEDDING_MODEL`, `GENERATION_MODEL` — model IDs for embeddings and generation.
+- `AUTH_SECRET_KEY`, `AUTH_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` — JWT settings.
+- `UPLOAD_DIR` — where uploaded files are stored before indexing.
+- `LOG_LEVEL`, `LOG_FORMAT` — application logging verbosity/format.
 
 3. Configure the database (pgvector extension, `users`, `sources`, `knowledge_base` tables). SQL examples are in `DEPLOY.md`.
 

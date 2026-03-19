@@ -28,6 +28,8 @@ nano .env
 - Set a real `GOOGLE_API_KEY`.
 - Configure PostgreSQL parameters.
 - Set `AUTH_SECRET_KEY` (a random long string).
+- Optional: set `RAG_TABLE_NAME=knowledge_base` explicitly.
+- Optional (for debugging): set `LOG_LEVEL=DEBUG`.
 
 4. Create a virtual environment and install dependencies:
 
@@ -143,6 +145,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable knowledge-rag
 sudo systemctl start knowledge-rag
 sudo systemctl status knowledge-rag
+```
+
+For live log streaming:
+
+```bash
+sudo journalctl -u knowledge-rag -f
 ```
 
 ### 4. DNS and Nginx for `knowledge.home.arpa`
