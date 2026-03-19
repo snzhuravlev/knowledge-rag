@@ -101,6 +101,13 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 print(pwd_context.hash("your_admin_password"))
 ```
 
+If you see an error with `bcrypt`/`passlib` compatibility, reinstall a known compatible bcrypt version:
+
+```bash
+source .venv/bin/activate
+pip install "bcrypt==4.0.1"
+```
+
 ```sql
 INSERT INTO users (username, password_hash, role)
 VALUES ('admin', '<PASSWORD_HASH>', 'admin');
