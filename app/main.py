@@ -1,11 +1,10 @@
 import json
-import os
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncGenerator, List, Optional
 
 import asyncpg
-from dotenv import load_dotenv
 from ebooklib import epub
 from fastapi import (
     BackgroundTasks,
@@ -26,39 +25,12 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from pypdf import PdfReader
 from docx import Document
+from app.config import configure_logging, load_settings
 
 
-load_dotenv()
-
-
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-if not GOOGLE_API_KEY:
-    raise RuntimeError("GOOGLE_API_KEY (or GEMINI_API_KEY) is not set in environment variables.")
-
-
-DB_USER = os.getenv("DB_USER", "claw")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "Drgh74364")
-DB_NAME = os.getenv("DB_NAME", "claw")
-DB_HOST = os.getenv("DB_HOST", "/var/run/postgresql")
-
-# Default configuration is aligned with the existing public.knowledge_base table.
-TABLE_NAME = os.getenv("RAG_TABLE_NAME", "knowledge_base")
-CONTENT_COLUMN = os.getenv("RAG_CONTENT_COLUMN", "content")
-SOURCE_COLUMN = os.getenv("RAG_SOURCE_COLUMN", "file_path")
-EMBEDDING_COLUMN = os.getenv("RAG_EMBEDDING_COLUMN", "embedding")
-METADATA_COLUMN = os.getenv("RAG_METADATA_COLUMN", "metadata")
-VECTOR_DIM = int(os.getenv("RAG_VECTOR_DIM", "768"))
-SIMILARITY_METRIC = os.getenv("RAG_SIMILARITY_METRIC", "cosine")  # cosine or inner_product
-
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "google/text-embedding-004")
-GENERATION_MODEL = os.getenv("GENERATION_MODEL", "google/gemini-flash-latest")
-
-AUTH_SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "change-me-in-production")
-AUTH_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
-
-UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "data/uploads")).resolve()
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+settings = load_settings()
+configure_logging(settings)
+logger = logging.getLogger("knowledge-rag")
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -122,27 +94,31 @@ app.add_middleware(
 )
 
 
-client = genai.Client(api_key=GOOGLE_API_KEY)
+client = genai.Client(api_key=settings.google_api_key)
 db_pool: Optional[asyncpg.Pool] = None
 
 
 @app.on_event("startup")
 async def startup() -> None:
     global db_pool
+    logger.info("Starting application and creating database pool")
     db_pool = await asyncpg.create_pool(
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME,
-        host=DB_HOST,
+        user=settings.db_user,
+        password=settings.db_password,
+        database=settings.db_name,
+        host=settings.db_host,
     )
+    logger.info("Database pool created successfully")
 
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
     global db_pool
     if db_pool is not None:
+        logger.info("Shutting down application and closing database pool")
         await db_pool.close()
         db_pool = None
+        logger.info("Database pool closed")
 
 
 def get_password_hash(password: str) -> str:
@@ -155,9 +131,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.utcnow() + (
+        expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
+    )
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, AUTH_SECRET_KEY, algorithm=AUTH_ALGORITHM)
+    return jwt.encode(to_encode, settings.auth_secret_key, algorithm=settings.auth_algorithm)
 
 
 async def get_db_connection() -> asyncpg.Connection:
@@ -173,12 +151,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, AUTH_SECRET_KEY, algorithms=[AUTH_ALGORITHM])
+        payload = jwt.decode(token, settings.auth_secret_key, algorithms=[settings.auth_algorithm])
         user_id: str = payload.get("sub")
         role: str = payload.get("role")
         if user_id is None or role is None:
             raise credentials_exception
     except JWTError:
+        logger.warning("JWT validation failed")
         raise credentials_exception
 
     async with db_pool.acquire() as conn:
@@ -187,6 +166,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
             int(user_id),
         )
     if row is None:
+        logger.warning("User from token not found in database: id=%s", user_id)
         raise credentials_exception
     return User(id=row["id"], username=row["username"], role=row["role"])
 
@@ -205,7 +185,7 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 
 async def embed_query(text: str) -> List[float]:
     response = client.models.embed_content(
-        model=EMBEDDING_MODEL,
+        model=settings.embedding_model,
         contents=text,
     )
     embedding = getattr(response, "embeddings", None)
@@ -285,16 +265,16 @@ async def fetch_top_k_chunks(query_embedding: List[float], k: int = 5) -> List[S
         raise RuntimeError("Database pool is not initialized.")
 
     async with db_pool.acquire() as conn:
-        if SIMILARITY_METRIC == "inner_product":
-            score_expression = f"{EMBEDDING_COLUMN} <#> $1::vector"
-            order_expression = f"{EMBEDDING_COLUMN} <#> $1::vector"
+        if settings.similarity_metric == "inner_product":
+            score_expression = f"{settings.embedding_column} <#> $1::vector"
+            order_expression = f"{settings.embedding_column} <#> $1::vector"
         else:
-            score_expression = f"1 - ({EMBEDDING_COLUMN} <-> $1::vector)"
-            order_expression = f"{EMBEDDING_COLUMN} <-> $1::vector"
+            score_expression = f"1 - ({settings.embedding_column} <-> $1::vector)"
+            order_expression = f"{settings.embedding_column} <-> $1::vector"
 
         query = f"""
-            SELECT id, {CONTENT_COLUMN} AS content, {SOURCE_COLUMN} AS source, {score_expression} AS score
-            FROM {TABLE_NAME}
+            SELECT id, {settings.content_column} AS content, {settings.source_column} AS source, {score_expression} AS score
+            FROM {settings.table_name}
             ORDER BY {order_expression}
             LIMIT $2
         """
@@ -304,6 +284,7 @@ async def fetch_top_k_chunks(query_embedding: List[float], k: int = 5) -> List[S
             query_embedding,
             k,
         )
+        logger.debug("Fetched %d chunks from %s", len(rows), settings.table_name)
 
     chunks: List[SourceChunk] = []
     for row in rows:
@@ -341,7 +322,7 @@ def build_rag_prompt(query: str, chunks: List[SourceChunk]) -> str:
 
 async def generate_answer(prompt: str) -> str:
     response = client.models.generate_content(
-        model=GENERATION_MODEL,
+        model=settings.generation_model,
         contents=prompt,
     )
     text_parts: List[str] = []
@@ -360,7 +341,7 @@ async def generate_answer(prompt: str) -> str:
 
 async def generate_answer_stream(prompt: str) -> AsyncGenerator[str, None]:
     stream = client.models.generate_content_stream(
-        model=GENERATION_MODEL,
+        model=settings.generation_model,
         contents=prompt,
     )
     async for event in stream:
@@ -384,7 +365,9 @@ async def index_source(source_id: int) -> None:
             source_id,
         )
         if src is None:
+            logger.warning("Source not found for indexing: source_id=%d", source_id)
             return
+        logger.info("Indexing started: source_id=%d title=%s", source_id, src["title"])
         await conn.execute(
             "UPDATE sources SET status = 'indexing', updated_at = now(), error_message = NULL WHERE id = $1",
             source_id,
@@ -392,6 +375,7 @@ async def index_source(source_id: int) -> None:
 
     path = Path(src["file_path"])
     if not path.exists():
+        logger.error("Source file not found on disk: source_id=%d path=%s", source_id, path)
         async with db_pool.acquire() as conn:
             await conn.execute(
                 "UPDATE sources SET status = 'failed', error_message = $2, updated_at = now() WHERE id = $1",
@@ -429,7 +413,7 @@ async def index_source(source_id: int) -> None:
                     }
                     await conn.execute(
                         f"""
-                        INSERT INTO {TABLE_NAME} ({CONTENT_COLUMN}, {SOURCE_COLUMN}, {EMBEDDING_COLUMN}, {METADATA_COLUMN})
+                        INSERT INTO {settings.table_name} ({settings.content_column}, {settings.source_column}, {settings.embedding_column}, {settings.metadata_column})
                         VALUES ($1, $2, $3, $4::jsonb)
                         """,
                         chunk,
@@ -444,7 +428,9 @@ async def index_source(source_id: int) -> None:
                 "UPDATE sources SET status = 'ready', updated_at = now() WHERE id = $1",
                 source_id,
             )
+        logger.info("Indexing completed: source_id=%d chunks=%d", source_id, inserted)
     except Exception as exc:
+        logger.exception("Indexing failed: source_id=%d", source_id)
         async with db_pool.acquire() as conn:
             await conn.execute(
                 "UPDATE sources SET status = 'failed', error_message = $2, updated_at = now() WHERE id = $1",
@@ -459,11 +445,13 @@ async def chat(request: ChatRequest, _: User = Depends(require_reader)) -> ChatR
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
     try:
+        logger.info("Chat request received")
         query_embedding = await embed_query(request.query)
         chunks = await fetch_top_k_chunks(query_embedding, k=5)
         prompt = build_rag_prompt(request.query, chunks)
         answer = await generate_answer(prompt)
     except Exception as exc:
+        logger.exception("Chat request failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return ChatResponse(answer=answer, sources=chunks)
@@ -475,10 +463,12 @@ async def chat_stream(request: ChatStreamRequest, _: User = Depends(require_read
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
     try:
+        logger.info("Streaming chat request received")
         query_embedding = await embed_query(request.query)
         chunks = await fetch_top_k_chunks(query_embedding, k=20)
         prompt = build_rag_prompt(request.query, chunks)
     except Exception as exc:
+        logger.exception("Streaming chat setup failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     async def event_generator() -> AsyncGenerator[bytes, None]:
@@ -509,11 +499,13 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Token:
         )
 
     if user_row is None or not verify_password(form_data.password, user_row["password_hash"]):
+        logger.warning("Login failed for username=%s", form_data.username)
         raise HTTPException(status_code=400, detail="Incorrect username or password")
 
     token = create_access_token(
         {"sub": str(user_row["id"]), "role": user_row["role"]},
     )
+    logger.info("Login succeeded for username=%s", form_data.username)
     return Token(access_token=token)
 
 
@@ -533,9 +525,10 @@ async def create_source(
         raise RuntimeError("Database pool is not initialized.")
 
     safe_name = file.filename or "uploaded"
-    dest_path = UPLOAD_DIR / f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{safe_name}"
+    dest_path = settings.upload_dir / f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{safe_name}"
     content = await file.read()
     dest_path.write_bytes(content)
+    logger.info("Source uploaded: name=%s path=%s bytes=%d", safe_name, dest_path, len(content))
 
     file_format = dest_path.suffix.lower().lstrip(".") or "txt"
 
@@ -632,7 +625,7 @@ async def delete_source(
         )
         # Remove related chunks from the shared knowledge_base by matching on metadata.source_id
         await conn.execute(
-            f"DELETE FROM {TABLE_NAME} WHERE {METADATA_COLUMN} ->> 'source_id' = $1::text",
+            f"DELETE FROM {settings.table_name} WHERE {settings.metadata_column} ->> 'source_id' = $1::text",
             str(source_id),
         )
         await conn.execute("DELETE FROM sources WHERE id = $1", source_id)
@@ -641,6 +634,7 @@ async def delete_source(
             Path(src["file_path"]).unlink(missing_ok=True)
         except Exception:
             pass
+    logger.info("Source deleted: source_id=%d", source_id)
     return {"status": "ok"}
 
 
