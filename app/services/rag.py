@@ -16,18 +16,37 @@ class RagService:
 
     async def embed_query(self, text: str) -> List[float]:
         model_name = self._normalize_model_name(self.settings.embedding_model)
-        try:
-            response = self.client.models.embed_content(
-                model=model_name,
-                contents=text,
-            )
-        except ClientError as exc:
-            if exc.code == 404:
-                raise RuntimeError(
-                    f"Embedding model '{model_name}' not found. "
-                    "Set EMBEDDING_MODEL to a valid model, e.g. 'text-embedding-004'."
-                ) from exc
-            raise
+        fallback_models = [
+            model_name,
+            "text-embedding-004",
+            "gemini-embedding-001",
+            "embedding-001",
+        ]
+        unique_models = []
+        for name in fallback_models:
+            if name not in unique_models:
+                unique_models.append(name)
+
+        last_error: Exception | None = None
+        response = None
+        for candidate in unique_models:
+            try:
+                response = self.client.models.embed_content(
+                    model=candidate,
+                    contents=text,
+                )
+                break
+            except ClientError as exc:
+                if exc.code == 404:
+                    last_error = exc
+                    continue
+                raise
+
+        if response is None:
+            raise RuntimeError(
+                "No available embedding model found for this API key. "
+                f"Tried: {', '.join(unique_models)}"
+            ) from last_error
         embedding = getattr(response, "embeddings", None)
         if not embedding:
             raise RuntimeError("Embedding model did not return embeddings.")

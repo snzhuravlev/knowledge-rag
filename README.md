@@ -61,6 +61,7 @@ Core settings are loaded from environment variables in `app/config.py`.
 - `RAG_VECTOR_DIM` (default `768`) and `RAG_SIMILARITY_METRIC` (`cosine` or `inner_product`) — retrieval behavior.
 - `EMBEDDING_MODEL`, `GENERATION_MODEL` — model IDs for embeddings and generation.
   - Examples: `text-embedding-004`, `gemini-1.5-flash`.
+  - If the configured embedding model is unavailable for your key, the app automatically tries `text-embedding-004`, `gemini-embedding-001`, then `embedding-001`.
 - `AUTH_SECRET_KEY`, `AUTH_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` — JWT settings.
 - `UPLOAD_DIR` — where uploaded files are stored before indexing.
 - `LOG_LEVEL`, `LOG_FORMAT` — application logging verbosity/format.
