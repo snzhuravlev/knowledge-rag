@@ -93,7 +93,7 @@ def load_settings() -> Settings:
         similarity_metric=os.getenv("RAG_SIMILARITY_METRIC", "cosine"),
         embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
         embedding_provider=embedding_provider,
-        generation_model=os.getenv("GENERATION_MODEL", "gemini-1.5-flash"),
+        generation_model=os.getenv("GENERATION_MODEL", "gemini-2.0-flash"),
         openai_api_key=openai_api_key,
         openai_base_url=openai_base_url,
         auth_secret_key=auth_secret_key,

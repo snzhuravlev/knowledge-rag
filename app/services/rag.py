@@ -95,10 +95,36 @@ class RagService:
 
     async def generate_answer(self, prompt: str) -> str:
         model_name = self._normalize_model_name(self.settings.generation_model)
-        response = self.client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-        )
+        generation_models = [
+            model_name,
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-flash-latest",
+        ]
+        unique_models = []
+        for name in generation_models:
+            if name not in unique_models:
+                unique_models.append(name)
+
+        last_error: Exception | None = None
+        response = None
+        for candidate in unique_models:
+            try:
+                response = self.client.models.generate_content(
+                    model=candidate,
+                    contents=prompt,
+                )
+                break
+            except ClientError as exc:
+                if exc.code == 404:
+                    last_error = exc
+                    continue
+                raise
+        if response is None:
+            raise RuntimeError(
+                "No available generation model found for this API key. "
+                f"Tried: {', '.join(unique_models)}"
+            ) from last_error
         text_parts: List[str] = []
         for part in getattr(response, "candidates", []) or []:
             content = getattr(part, "content", None)
@@ -114,19 +140,57 @@ class RagService:
 
     async def generate_answer_stream(self, prompt: str) -> AsyncGenerator[str, None]:
         model_name = self._normalize_model_name(self.settings.generation_model)
-        stream = self.client.models.generate_content_stream(
-            model=model_name,
-            contents=prompt,
-        )
-        async for event in stream:
-            for part in getattr(event, "candidates", []) or []:
-                content = getattr(part, "content", None)
-                if not content:
+        generation_models = [
+            model_name,
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-flash-latest",
+        ]
+        unique_models = []
+        for name in generation_models:
+            if name not in unique_models:
+                unique_models.append(name)
+
+        last_error: Exception | None = None
+        stream = None
+        for candidate in unique_models:
+            try:
+                stream = self.client.models.generate_content_stream(
+                    model=candidate,
+                    contents=prompt,
+                )
+                break
+            except ClientError as exc:
+                if exc.code == 404:
+                    last_error = exc
                     continue
-                for sub in getattr(content, "parts", []):
-                    value = getattr(sub, "text", None)
-                    if isinstance(value, str) and value:
-                        yield value
+                raise
+        if stream is None:
+            raise RuntimeError(
+                "No available stream generation model found for this API key. "
+                f"Tried: {', '.join(unique_models)}"
+            ) from last_error
+
+        if hasattr(stream, "__aiter__"):
+            async for event in stream:
+                for part in getattr(event, "candidates", []) or []:
+                    content = getattr(part, "content", None)
+                    if not content:
+                        continue
+                    for sub in getattr(content, "parts", []):
+                        value = getattr(sub, "text", None)
+                        if isinstance(value, str) and value:
+                            yield value
+        else:
+            for event in stream:
+                for part in getattr(event, "candidates", []) or []:
+                    content = getattr(part, "content", None)
+                    if not content:
+                        continue
+                    for sub in getattr(content, "parts", []):
+                        value = getattr(sub, "text", None)
+                        if isinstance(value, str) and value:
+                            yield value
 
     @staticmethod
     def _normalize_model_name(model_name: str) -> str:

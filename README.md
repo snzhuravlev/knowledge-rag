@@ -6,7 +6,7 @@ Minimalist web interface for a local RAG system:
 - Modular backend: routes + services + repositories + centralized app state.
 - Chunk storage in the `knowledge_base` table.
 - Embeddings (production): `text-embedding-3-small`.
-- Answer generation: `gemini-1.5-flash`.
+- Answer generation: `gemini-2.0-flash`.
 - Web UI: Tailwind, chat + sources list, streaming answers.
 - User roles: `admin`, `reader`.
 
@@ -63,6 +63,7 @@ Core settings are loaded from environment variables in `app/config.py`.
 - `EMBEDDING_PROVIDER` — `openai` or `google` (default is `google`).
 - `EMBEDDING_MODEL`, `GENERATION_MODEL` — model IDs for embeddings and generation.
   - Recommended production embedding setup: `EMBEDDING_PROVIDER=openai`, `EMBEDDING_MODEL=text-embedding-3-small`.
+  - For generation, if the configured model is unavailable, the app tries: configured model -> `gemini-2.0-flash` -> `gemini-1.5-flash` -> `gemini-flash-latest`.
   - If `EMBEDDING_PROVIDER=google`, the app can fall back between compatible Google embedding models.
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL` — used when `EMBEDDING_PROVIDER=openai`.
 - `AUTH_SECRET_KEY`, `AUTH_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` — JWT settings.
