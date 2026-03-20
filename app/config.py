@@ -28,6 +28,7 @@ class Settings:
     embedding_model: str
     embedding_provider: str
     generation_model: str
+    generation_provider: str
     openai_api_key: str | None
     openai_base_url: str | None
     auth_secret_key: str
@@ -47,10 +48,15 @@ def load_settings() -> Settings:
     embedding_provider = os.getenv("EMBEDDING_PROVIDER", "google").lower()
     if embedding_provider not in {"google", "openai"}:
         raise RuntimeError("EMBEDDING_PROVIDER must be either 'google' or 'openai'.")
+    generation_provider = os.getenv("GENERATION_PROVIDER", "google").lower()
+    if generation_provider not in {"google", "openai"}:
+        raise RuntimeError("GENERATION_PROVIDER must be either 'google' or 'openai'.")
     openai_api_key = os.getenv("OPENAI_API_KEY")
     openai_base_url = os.getenv("OPENAI_BASE_URL")
-    if embedding_provider == "openai" and not openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY must be set when EMBEDDING_PROVIDER=openai.")
+    if (embedding_provider == "openai" or generation_provider == "openai") and not openai_api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY must be set when EMBEDDING_PROVIDER=openai or GENERATION_PROVIDER=openai."
+        )
 
     google_api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not google_api_key:
@@ -94,6 +100,7 @@ def load_settings() -> Settings:
         embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
         embedding_provider=embedding_provider,
         generation_model=os.getenv("GENERATION_MODEL", "gemini-2.0-flash"),
+        generation_provider=generation_provider,
         openai_api_key=openai_api_key,
         openai_base_url=openai_base_url,
         auth_secret_key=auth_secret_key,

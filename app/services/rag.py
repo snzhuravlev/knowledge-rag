@@ -74,6 +74,25 @@ class RagService:
     async def fetch_top_k_chunks(self, query_embedding: List[float], k: int = 5) -> List[SourceChunk]:
         return await self.chunk_repo.fetch_top_k(query_embedding, k)
 
+    async def fetch_hybrid_chunks(
+        self,
+        query_text: str,
+        query_embedding: List[float],
+        vector_k: int = 20,
+        lexical_k: int = 40,
+    ) -> List[SourceChunk]:
+        vector_chunks = await self.chunk_repo.fetch_top_k(query_embedding, vector_k)
+        lexical_chunks = await self.chunk_repo.fetch_by_source_path_terms(query_text, lexical_k)
+        merged: List[SourceChunk] = []
+        seen = set()
+        for chunk in lexical_chunks + vector_chunks:
+            key = (chunk.source, chunk.id)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(chunk)
+        return merged
+
     @staticmethod
     def build_rag_prompt(query: str, chunks: List[SourceChunk]) -> str:
         context_blocks = []
@@ -94,6 +113,8 @@ class RagService:
         )
 
     async def generate_answer(self, prompt: str) -> str:
+        if self.settings.generation_provider == "openai":
+            return await self._generate_answer_openai(prompt)
         model_name = self._normalize_model_name(self.settings.generation_model)
         generation_models = [
             model_name,
@@ -121,6 +142,8 @@ class RagService:
                     continue
                 raise
         if response is None:
+            if self.openai_client is not None:
+                return await self._generate_answer_openai(prompt)
             raise RuntimeError(
                 "No available generation model found for this API key. "
                 f"Tried: {', '.join(unique_models)}"
@@ -139,6 +162,10 @@ class RagService:
         return "\n".join(text_parts).strip()
 
     async def generate_answer_stream(self, prompt: str) -> AsyncGenerator[str, None]:
+        if self.settings.generation_provider == "openai":
+            async for piece in self._generate_answer_stream_openai(prompt):
+                yield piece
+            return
         model_name = self._normalize_model_name(self.settings.generation_model)
         generation_models = [
             model_name,
@@ -166,6 +193,10 @@ class RagService:
                     continue
                 raise
         if stream is None:
+            if self.openai_client is not None:
+                async for piece in self._generate_answer_stream_openai(prompt):
+                    yield piece
+                return
             raise RuntimeError(
                 "No available stream generation model found for this API key. "
                 f"Tried: {', '.join(unique_models)}"
@@ -196,3 +227,39 @@ class RagService:
     def _normalize_model_name(model_name: str) -> str:
         # Keep backward compatibility with older docs that used "google/<model>".
         return model_name.split("/", 1)[1] if model_name.startswith("google/") else model_name
+
+    def _openai_generation_model(self) -> str:
+        model = self.settings.generation_model
+        # If generation model is set to a Gemini id, use OpenAI default.
+        if model.startswith("gemini"):
+            return "gpt-4o-mini"
+        return model
+
+    async def _generate_answer_openai(self, prompt: str) -> str:
+        if self.openai_client is None:
+            raise RuntimeError("OpenAI client is not configured for generation.")
+        model = self._openai_generation_model()
+        response = self.openai_client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+        )
+        text = response.choices[0].message.content if response.choices else ""
+        return (text or "").strip()
+
+    async def _generate_answer_stream_openai(self, prompt: str) -> AsyncGenerator[str, None]:
+        if self.openai_client is None:
+            raise RuntimeError("OpenAI client is not configured for generation.")
+        model = self._openai_generation_model()
+        stream = self.openai_client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            stream=True,
+        )
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta

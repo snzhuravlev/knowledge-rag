@@ -1,4 +1,5 @@
 import json
+import re
 from typing import List, Optional
 
 import asyncpg
@@ -131,6 +132,34 @@ class ChunkRepository:
             for row in rows
         ]
 
+    async def fetch_by_source_path_terms(self, query_text: str, k: int = 30) -> List[SourceChunk]:
+        terms = self._extract_terms(query_text)
+        if not terms:
+            return []
+        pattern = "|".join(re.escape(term) for term in terms)
+        async with self.pool.acquire() as conn:
+            query = f"""
+                SELECT DISTINCT ON ({self.settings.source_column})
+                    id,
+                    {self.settings.content_column} AS content,
+                    {self.settings.source_column} AS source,
+                    1.0::float AS score
+                FROM {self.settings.table_name}
+                WHERE {self.settings.source_column} ~* $1
+                ORDER BY {self.settings.source_column}, id
+                LIMIT $2
+            """
+            rows = await conn.fetch(query, pattern, k)
+        return [
+            SourceChunk(
+                id=row["id"],
+                content=row["content"],
+                source=row.get("source"),
+                score=float(row["score"]),
+            )
+            for row in rows
+        ]
+
     async def insert_chunks(
         self,
         chunks: List[str],
@@ -170,3 +199,17 @@ class ChunkRepository:
     @staticmethod
     def _to_vector_literal(values: List[float]) -> str:
         return "[" + ",".join(f"{float(v):.10f}" for v in values) + "]"
+
+    @staticmethod
+    def _extract_terms(query_text: str) -> List[str]:
+        terms = re.findall(r"[A-Za-zА-Яа-я0-9_]{4,}", query_text.lower())
+        stop_words = {"список", "источник", "источников", "запрос", "таблице", "базы", "знаний"}
+        filtered = [term for term in terms if term not in stop_words]
+        # Keep unique terms while preserving order.
+        seen = set()
+        result: List[str] = []
+        for term in filtered:
+            if term not in seen:
+                seen.add(term)
+                result.append(term)
+        return result[:6]

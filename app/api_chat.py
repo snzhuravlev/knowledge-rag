@@ -23,7 +23,12 @@ async def chat(
     if not payload.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     query_embedding = await state.rag_service.embed_query(payload.query)
-    chunks = await state.rag_service.fetch_top_k_chunks(query_embedding, k=5)
+    chunks = await state.rag_service.fetch_hybrid_chunks(
+        query_text=payload.query,
+        query_embedding=query_embedding,
+        vector_k=20,
+        lexical_k=50,
+    )
     prompt = state.rag_service.build_rag_prompt(payload.query, chunks)
     answer = await state.rag_service.generate_answer(prompt)
     return ChatResponse(answer=answer, sources=chunks)
@@ -41,7 +46,12 @@ async def chat_stream(
     if not payload.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     query_embedding = await state.rag_service.embed_query(payload.query)
-    chunks = await state.rag_service.fetch_top_k_chunks(query_embedding, k=20)
+    chunks = await state.rag_service.fetch_hybrid_chunks(
+        query_text=payload.query,
+        query_embedding=query_embedding,
+        vector_k=40,
+        lexical_k=80,
+    )
     prompt = state.rag_service.build_rag_prompt(payload.query, chunks)
 
     async def event_generator() -> AsyncGenerator[bytes, None]:

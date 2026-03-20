@@ -6,7 +6,7 @@ Minimalist web interface for a local RAG system:
 - Modular backend: routes + services + repositories + centralized app state.
 - Chunk storage in the `knowledge_base` table.
 - Embeddings (production): `text-embedding-3-small`.
-- Answer generation: `gemini-2.0-flash`.
+- Answer generation (recommended production): `gpt-4o-mini`.
 - Web UI: Tailwind, chat + sources list, streaming answers.
 - User roles: `admin`, `reader`.
 
@@ -61,9 +61,11 @@ Core settings are loaded from environment variables in `app/config.py`.
 - `RAG_VECTOR_DIM` (default `768`) and `RAG_SIMILARITY_METRIC` (`cosine` or `inner_product`) — retrieval behavior.
   - For `EMBEDDING_PROVIDER=openai`, embeddings are requested with `dimensions=RAG_VECTOR_DIM` to match pgvector column size.
 - `EMBEDDING_PROVIDER` — `openai` or `google` (default is `google`).
+- `GENERATION_PROVIDER` — `openai` or `google` (default is `google`).
 - `EMBEDDING_MODEL`, `GENERATION_MODEL` — model IDs for embeddings and generation.
   - Recommended production embedding setup: `EMBEDDING_PROVIDER=openai`, `EMBEDDING_MODEL=text-embedding-3-small`.
-  - For generation, if the configured model is unavailable, the app tries: configured model -> `gemini-2.0-flash` -> `gemini-1.5-flash` -> `gemini-flash-latest`.
+  - Recommended production generation setup: `GENERATION_PROVIDER=openai`, `GENERATION_MODEL=gpt-4o-mini`.
+  - If generation is configured to Google and a model is unavailable, the app tries: configured model -> `gemini-2.0-flash` -> `gemini-1.5-flash` -> `gemini-flash-latest`, then falls back to OpenAI if configured.
   - If `EMBEDDING_PROVIDER=google`, the app can fall back between compatible Google embedding models.
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL` — used when `EMBEDDING_PROVIDER=openai`.
 - `AUTH_SECRET_KEY`, `AUTH_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` — JWT settings.
@@ -158,6 +160,7 @@ alembic downgrade -1
   - `POST /api/chat` — classic request/response.
   - `POST /api/chat-stream` — streaming responses (Server-Sent Events).
 - Chat requires authorization (role `reader` or `admin`).
+- Retrieval uses a hybrid strategy: vector similarity + lexical search by `file_path`, which improves source coverage for queries like "postgres".
 - UI:
   - input field for the query,
   - streaming assistant response,
