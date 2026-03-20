@@ -5,7 +5,7 @@ Minimalist web interface for a local RAG system:
 - Backend: FastAPI + asyncpg + PostgreSQL with pgvector.
 - Modular backend: routes + services + repositories + centralized app state.
 - Chunk storage in the `knowledge_base` table.
-- Embeddings: `text-embedding-004`.
+- Embeddings (production): `text-embedding-3-small`.
 - Answer generation: `gemini-1.5-flash`.
 - Web UI: Tailwind, chat + sources list, streaming answers.
 - User roles: `admin`, `reader`.
@@ -59,9 +59,11 @@ Core settings are loaded from environment variables in `app/config.py`.
 - `RAG_TABLE_NAME` (default `knowledge_base`) — table with chunks/embeddings.
 - `RAG_CONTENT_COLUMN`, `RAG_SOURCE_COLUMN`, `RAG_EMBEDDING_COLUMN`, `RAG_METADATA_COLUMN` — column mapping for RAG reads/writes.
 - `RAG_VECTOR_DIM` (default `768`) and `RAG_SIMILARITY_METRIC` (`cosine` or `inner_product`) — retrieval behavior.
+- `EMBEDDING_PROVIDER` — `openai` or `google` (default is `google`).
 - `EMBEDDING_MODEL`, `GENERATION_MODEL` — model IDs for embeddings and generation.
-  - Examples: `text-embedding-004`, `gemini-1.5-flash`.
-  - If the configured embedding model is unavailable for your key, the app automatically tries `text-embedding-004`, `gemini-embedding-001`, then `embedding-001`.
+  - Recommended production embedding setup: `EMBEDDING_PROVIDER=openai`, `EMBEDDING_MODEL=text-embedding-3-small`.
+  - If `EMBEDDING_PROVIDER=google`, the app can fall back between compatible Google embedding models.
+- `OPENAI_API_KEY`, `OPENAI_BASE_URL` — used when `EMBEDDING_PROVIDER=openai`.
 - `AUTH_SECRET_KEY`, `AUTH_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` — JWT settings.
 - `UPLOAD_DIR` — where uploaded files are stored before indexing.
 - `LOG_LEVEL`, `LOG_FORMAT` — application logging verbosity/format.

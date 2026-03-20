@@ -26,7 +26,10 @@ class Settings:
     vector_dim: int
     similarity_metric: str
     embedding_model: str
+    embedding_provider: str
     generation_model: str
+    openai_api_key: str | None
+    openai_base_url: str | None
     auth_secret_key: str
     auth_algorithm: str
     access_token_expire_minutes: int
@@ -41,6 +44,14 @@ class Settings:
 
 
 def load_settings() -> Settings:
+    embedding_provider = os.getenv("EMBEDDING_PROVIDER", "google").lower()
+    if embedding_provider not in {"google", "openai"}:
+        raise RuntimeError("EMBEDDING_PROVIDER must be either 'google' or 'openai'.")
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    openai_base_url = os.getenv("OPENAI_BASE_URL")
+    if embedding_provider == "openai" and not openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY must be set when EMBEDDING_PROVIDER=openai.")
+
     google_api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not google_api_key:
         raise RuntimeError("GOOGLE_API_KEY (or GEMINI_API_KEY) is not set in environment variables.")
@@ -80,8 +91,11 @@ def load_settings() -> Settings:
         metadata_column=validated_identifier("RAG_METADATA_COLUMN", "metadata"),
         vector_dim=int(os.getenv("RAG_VECTOR_DIM", "768")),
         similarity_metric=os.getenv("RAG_SIMILARITY_METRIC", "cosine"),
-        embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-004"),
+        embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
+        embedding_provider=embedding_provider,
         generation_model=os.getenv("GENERATION_MODEL", "gemini-1.5-flash"),
+        openai_api_key=openai_api_key,
+        openai_base_url=openai_base_url,
         auth_secret_key=auth_secret_key,
         auth_algorithm=os.getenv("AUTH_ALGORITHM", "HS256"),
         access_token_expire_minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60")),

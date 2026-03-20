@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from google import genai
+from openai import OpenAI
 
 from app.api_auth import router as auth_router
 from app.api_chat import router as chat_router
@@ -32,10 +33,21 @@ async def lifespan(app: FastAPI):
     await init_pool(settings)
     pool = get_pool()
     client = genai.Client(api_key=settings.google_api_key)
+    openai_client = None
+    if settings.embedding_provider == "openai":
+        openai_client = OpenAI(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+        )
     user_repo = UserRepository(pool)
     source_repo = SourceRepository(pool)
     chunk_repo = ChunkRepository(pool, settings)
-    rag_service = RagService(settings=settings, chunk_repo=chunk_repo, client=client)
+    rag_service = RagService(
+        settings=settings,
+        chunk_repo=chunk_repo,
+        client=client,
+        openai_client=openai_client,
+    )
     indexing_service = IndexingService(source_repo=source_repo, chunk_repo=chunk_repo, rag_service=rag_service)
     if settings.enable_indexing_worker:
         await indexing_service.start_worker()
@@ -48,6 +60,7 @@ async def lifespan(app: FastAPI):
         indexing_service=indexing_service,
         rate_limiter=RateLimiter(),
         genai_client=client,
+        openai_client=openai_client,
     )
     yield
     logger.info("Shutting down application")

@@ -2,6 +2,7 @@ from typing import AsyncGenerator, List
 
 from google import genai
 from google.genai.errors import ClientError
+from openai import OpenAI
 
 from app.config import Settings
 from app.db.repositories import ChunkRepository
@@ -9,12 +10,28 @@ from app.schemas import SourceChunk
 
 
 class RagService:
-    def __init__(self, settings: Settings, chunk_repo: ChunkRepository, client: genai.Client) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        chunk_repo: ChunkRepository,
+        client: genai.Client,
+        openai_client: OpenAI | None = None,
+    ) -> None:
         self.settings = settings
         self.chunk_repo = chunk_repo
         self.client = client
+        self.openai_client = openai_client
 
     async def embed_query(self, text: str) -> List[float]:
+        if self.settings.embedding_provider == "openai":
+            if self.openai_client is None:
+                raise RuntimeError("OpenAI client is not configured.")
+            response = self.openai_client.embeddings.create(
+                model=self.settings.embedding_model,
+                input=text,
+            )
+            return list(response.data[0].embedding)
+
         model_name = self._normalize_model_name(self.settings.embedding_model)
         fallback_models = [
             model_name,

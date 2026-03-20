@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from google import genai
+from openai import OpenAI
 
 from app.config import Settings
 from app.core.rate_limit import RateLimiter
@@ -19,3 +20,4 @@ class AppState:
     indexing_service: IndexingService
     rate_limiter: RateLimiter
     genai_client: genai.Client
+    openai_client: OpenAI | None
