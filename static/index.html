@@ -21,6 +21,39 @@
               </div>
             </div>
           </div>
+          <div class="flex items-center gap-2">
+            <div id="auth-user-label" class="hidden text-xs text-slate-400"></div>
+            <form id="auth-form" class="flex items-center gap-2">
+              <input
+                id="login-username"
+                type="text"
+                autocomplete="username"
+                placeholder="Username"
+                class="h-8 w-28 rounded-lg border border-slate-700 bg-slate-900 px-2 text-xs text-slate-100 placeholder-slate-500 focus:border-sky-500/70 focus:outline-none"
+              />
+              <input
+                id="login-password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="Password"
+                class="h-8 w-28 rounded-lg border border-slate-700 bg-slate-900 px-2 text-xs text-slate-100 placeholder-slate-500 focus:border-sky-500/70 focus:outline-none"
+              />
+              <button
+                id="login-btn"
+                type="submit"
+                class="h-8 rounded-lg border border-sky-500/70 bg-sky-500/20 px-3 text-xs font-medium text-sky-200 hover:bg-sky-500/30"
+              >
+                Login
+              </button>
+            </form>
+            <button
+              id="logout-btn"
+              type="button"
+              class="hidden h-8 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-slate-200 hover:border-slate-500"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
@@ -129,6 +162,11 @@
       const sourcesListEl = document.getElementById("sources-list");
       const sourcesEmptyEl = document.getElementById("sources-empty");
       const toggleSourcesBtn = document.getElementById("toggle-sources");
+      const authFormEl = document.getElementById("auth-form");
+      const loginUsernameEl = document.getElementById("login-username");
+      const loginPasswordEl = document.getElementById("login-password");
+      const logoutBtnEl = document.getElementById("logout-btn");
+      const authUserLabelEl = document.getElementById("auth-user-label");
       const PAGE_SIZE = 5;
       let authToken = null;
       let currentUser = null;
@@ -305,6 +343,16 @@
         renderSourcesPage();
       }
 
+      function refreshAuthUi() {
+        const isLoggedIn = Boolean(authToken && currentUser);
+        authFormEl.classList.toggle("hidden", isLoggedIn);
+        logoutBtnEl.classList.toggle("hidden", !isLoggedIn);
+        authUserLabelEl.classList.toggle("hidden", !isLoggedIn);
+        authUserLabelEl.textContent = isLoggedIn
+          ? `${currentUser.username} (${currentUser.role})`
+          : "";
+      }
+
       toggleSourcesBtn.addEventListener("click", () => {
         const isHidden = sourcesListEl.classList.contains("hidden") && sourcesEmptyEl.classList.contains("hidden");
         if (isHidden) {
@@ -472,7 +520,15 @@
         const meResp = await apiFetch("/auth/me");
         if (meResp.ok) {
           currentUser = await meResp.json();
+          refreshAuthUi();
         }
+      }
+
+      function handleLogout() {
+        authToken = null;
+        currentUser = null;
+        localStorage.removeItem("rag_token");
+        refreshAuthUi();
       }
 
       async function initAuth() {
@@ -493,7 +549,30 @@
             currentUser = null;
           }
         }
+        refreshAuthUi();
       }
+
+      authFormEl.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const username = loginUsernameEl.value.trim();
+        const password = loginPasswordEl.value;
+        if (!username || !password) {
+          appendMessage("assistant", "Введите username и password для входа.");
+          return;
+        }
+        try {
+          await handleLogin(username, password);
+          loginPasswordEl.value = "";
+          appendMessage("assistant", "Вход выполнен успешно.");
+        } catch (err) {
+          appendMessage("assistant", `Ошибка входа: ${err.message || err}`);
+        }
+      });
+
+      logoutBtnEl.addEventListener("click", () => {
+        handleLogout();
+        appendMessage("assistant", "Вы вышли из системы.");
+      });
 
       initAuth();
     </script>
