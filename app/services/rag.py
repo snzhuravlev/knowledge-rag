@@ -29,6 +29,7 @@ class RagService:
             response = self.openai_client.embeddings.create(
                 model=self.settings.embedding_model,
                 input=text,
+                dimensions=self.settings.vector_dim,
             )
             return list(response.data[0].embedding)
 

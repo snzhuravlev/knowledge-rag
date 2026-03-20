@@ -59,6 +59,7 @@ Core settings are loaded from environment variables in `app/config.py`.
 - `RAG_TABLE_NAME` (default `knowledge_base`) — table with chunks/embeddings.
 - `RAG_CONTENT_COLUMN`, `RAG_SOURCE_COLUMN`, `RAG_EMBEDDING_COLUMN`, `RAG_METADATA_COLUMN` — column mapping for RAG reads/writes.
 - `RAG_VECTOR_DIM` (default `768`) and `RAG_SIMILARITY_METRIC` (`cosine` or `inner_product`) — retrieval behavior.
+  - For `EMBEDDING_PROVIDER=openai`, embeddings are requested with `dimensions=RAG_VECTOR_DIM` to match pgvector column size.
 - `EMBEDDING_PROVIDER` — `openai` or `google` (default is `google`).
 - `EMBEDDING_MODEL`, `GENERATION_MODEL` — model IDs for embeddings and generation.
   - Recommended production embedding setup: `EMBEDDING_PROVIDER=openai`, `EMBEDDING_MODEL=text-embedding-3-small`.
