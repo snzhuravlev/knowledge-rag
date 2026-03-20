@@ -3,6 +3,7 @@
 Minimalist web interface for a local RAG system:
 
 - Backend: FastAPI + asyncpg + PostgreSQL with pgvector.
+- Modular backend: routes + services + repositories + centralized app state.
 - Chunk storage in the `knowledge_base` table.
 - Embeddings: `google/text-embedding-004`.
 - Answer generation: `google/gemini-flash-latest`.
@@ -13,7 +14,13 @@ Minimalist web interface for a local RAG system:
 
 - `app/main.py` — FastAPI application, authentication, chat, CRUD for sources, indexing.
 - `app/config.py` — centralized application settings (env loading, defaults, logging config).
+- `app/api_*.py` — route groups (`auth`, `chat`, `sources`, `health`).
+- `app/services/` — RAG, indexing queue worker, and extractors.
+- `app/db/` — database pool and repositories.
+- `app/core/` — security helpers, rate limiter, request middleware, error handlers.
 - `static/index.html` — frontend (chat, sources display, basic token handling).
+- `alembic/` + `alembic.ini` — migration infrastructure and baseline revision.
+- `.github/workflows/ci.yml` — CI checks (compile + dependency audit).
 - `requirements.txt` — dependencies.
 - `.env.example` — example environment configuration.
 - `DEPLOY.md` — detailed deployment guide for `knowledge.home.arpa`.
@@ -56,6 +63,10 @@ Core settings are loaded from environment variables in `app/config.py`.
 - `AUTH_SECRET_KEY`, `AUTH_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` — JWT settings.
 - `UPLOAD_DIR` — where uploaded files are stored before indexing.
 - `LOG_LEVEL`, `LOG_FORMAT` — application logging verbosity/format.
+- `CORS_ALLOW_ORIGINS` — comma-separated allowlist of origins.
+- `UPLOAD_MAX_BYTES` — upload size limit in bytes (default 20 MB).
+- `LOGIN_RATE_LIMIT_PER_MINUTE`, `CHAT_RATE_LIMIT_PER_MINUTE` — built-in request throttling.
+- `ENABLE_INDEXING_WORKER` — enables background indexing queue worker.
 
 3. Configure the database (pgvector extension, `users`, `sources`, `knowledge_base` tables). SQL examples are in `DEPLOY.md`.
 
@@ -96,7 +107,43 @@ Tokens:
   - `ready` → fully indexed;
   - `failed` → error occurred, error message is stored in `error_message`.
 
-Indexing is started in the background (`BackgroundTasks`) after upload.
+Indexing is started in an internal queue worker after upload.
+
+## Health and observability
+
+- Liveness endpoint: `GET /health/live`.
+- Readiness endpoint: `GET /health/ready` (checks DB connectivity and queue size).
+- Each response includes:
+  - `X-Request-ID` for correlation,
+  - `X-Response-Time-Ms` for latency debugging.
+
+## Security baseline
+
+- `AUTH_SECRET_KEY` and `DB_PASSWORD` are required at startup.
+- SQL table/column identifiers from env are validated with a strict identifier pattern.
+- CORS is allowlist-based via `CORS_ALLOW_ORIGINS`.
+- Unhandled exceptions are returned as a safe generic message with an internal reference ID.
+
+## Migrations
+
+Use Alembic for schema changes:
+
+```bash
+source .venv/bin/activate
+alembic upgrade head
+```
+
+Create new migration:
+
+```bash
+alembic revision -m "describe change"
+```
+
+Rollback one step:
+
+```bash
+alembic downgrade -1
+```
 
 ## Chat usage
 

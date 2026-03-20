@@ -28,8 +28,11 @@ nano .env
 - Set a real `GOOGLE_API_KEY`.
 - Configure PostgreSQL parameters.
 - Set `AUTH_SECRET_KEY` (a random long string).
+- Set `DB_PASSWORD` (required).
+- Set `CORS_ALLOW_ORIGINS` to trusted origins only (comma-separated).
 - Optional: set `RAG_TABLE_NAME=knowledge_base` explicitly.
 - Optional (for debugging): set `LOG_LEVEL=DEBUG`.
+- Optional hardening: set `UPLOAD_MAX_BYTES`, `LOGIN_RATE_LIMIT_PER_MINUTE`, `CHAT_RATE_LIMIT_PER_MINUTE`.
 
 4. Create a virtual environment and install dependencies:
 
@@ -42,6 +45,15 @@ deactivate
 ```
 
 ### 2. PostgreSQL and DB schema setup
+
+Use Alembic migrations as the primary schema management flow:
+
+```bash
+source .venv/bin/activate
+alembic upgrade head
+```
+
+Manual SQL is kept below as a fallback/bootstrap reference.
 
 1. Enable pgvector and create the extension (if not already done):
 
@@ -153,6 +165,12 @@ For live log streaming:
 sudo journalctl -u knowledge-rag -f
 ```
 
+Readiness check:
+
+```bash
+curl -k https://knowledge.home.arpa/health/ready
+```
+
 ### 4. DNS and Nginx for `knowledge.home.arpa`
 
 #### DNS
@@ -198,7 +216,14 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 5. Self-signed SSL for `knowledge.home.arpa`
+### 5. TLS strategy
+
+#### Production recommendation
+
+Use a trusted certificate (Let's Encrypt or corporate CA).  
+Self-signed certificates should be limited to lab/dev environments.
+
+#### Self-signed SSL for lab/dev `knowledge.home.arpa`
 
 ```bash
 sudo mkdir -p /etc/nginx/self-signed
@@ -216,12 +241,55 @@ sudo systemctl reload nginx
 
 The certificate must be imported into trusted certificates in browsers/client OSes if you want to get rid of warnings.
 
-### 6. Updating the application
+### 6. Updating the application (with rollback steps)
 
 ```bash
 cd /opt/knowledge-rag
 sudo -u www-data git pull
 sudo -u www-data /opt/knowledge-rag/.venv/bin/pip install -r requirements.txt
+sudo -u www-data /opt/knowledge-rag/.venv/bin/alembic upgrade head
+sudo systemctl restart knowledge-rag
+curl -k https://knowledge.home.arpa/health/ready
+```
+
+Rollback (example):
+
+```bash
+cd /opt/knowledge-rag
+sudo -u www-data git checkout <previous_commit>
+sudo -u www-data /opt/knowledge-rag/.venv/bin/alembic downgrade -1
 sudo systemctl restart knowledge-rag
 ```
+
+### 7. CI/CD baseline
+
+GitHub Actions workflow is available at `.github/workflows/ci.yml`:
+
+- compile check (`python -m compileall app`)
+- dependency audit (`pip-audit`)
+
+Recommended release gates:
+
+- CI must pass before merge/deploy.
+- Deploy only after `alembic upgrade head`.
+- Run smoke checks on `/health/live` and `/health/ready`.
+
+### 8. Backup and restore
+
+Backup:
+
+```bash
+pg_dump -Fc -U <db_user> -d <db_name> > /var/backups/knowledge-rag-$(date +%F).dump
+```
+
+Restore:
+
+```bash
+pg_restore -U <db_user> -d <db_name> --clean --if-exists /var/backups/knowledge-rag-YYYY-MM-DD.dump
+```
+
+Operational policy:
+
+- Keep at least daily backups with retention policy.
+- Validate restore regularly on a staging environment.
 
