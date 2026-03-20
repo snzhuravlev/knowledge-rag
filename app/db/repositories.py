@@ -105,6 +105,7 @@ class ChunkRepository:
         self.settings = settings
 
     async def fetch_top_k(self, query_embedding: List[float], k: int) -> List[SourceChunk]:
+        query_vector = self._to_vector_literal(query_embedding)
         async with self.pool.acquire() as conn:
             if self.settings.similarity_metric == "inner_product":
                 score_expression = f"{self.settings.embedding_column} <#> $1::vector"
@@ -119,7 +120,7 @@ class ChunkRepository:
                 ORDER BY {order_expression}
                 LIMIT $2
             """
-            rows = await conn.fetch(query, query_embedding, k)
+            rows = await conn.fetch(query, query_vector, k)
         return [
             SourceChunk(
                 id=row["id"],
@@ -143,6 +144,7 @@ class ChunkRepository:
             async with conn.transaction():
                 for idx, chunk in enumerate(chunks):
                     emb = await embed_func(chunk)
+                    emb_vector = self._to_vector_literal(emb)
                     metadata = dict(metadata_base)
                     metadata["chunk_index"] = idx
                     await conn.execute(
@@ -152,7 +154,7 @@ class ChunkRepository:
                         """,
                         chunk,
                         file_path,
-                        emb,
+                        emb_vector,
                         json.dumps(metadata),
                     )
                     inserted += 1
@@ -164,3 +166,7 @@ class ChunkRepository:
                 f"DELETE FROM {self.settings.table_name} WHERE {self.settings.metadata_column} ->> 'source_id' = $1::text",
                 str(source_id),
             )
+
+    @staticmethod
+    def _to_vector_literal(values: List[float]) -> str:
+        return "[" + ",".join(f"{float(v):.10f}" for v in values) + "]"
