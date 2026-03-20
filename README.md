@@ -119,6 +119,7 @@ Indexing is started in an internal queue worker after upload.
 
 - Liveness endpoint: `GET /health/live`.
 - Readiness endpoint: `GET /health/ready` (checks DB connectivity and queue size).
+- Vector config endpoint: `GET /health/vector-config` (checks table/column and `vector(768)` compatibility).
 - Each response includes:
   - `X-Request-ID` for correlation,
   - `X-Response-Time-Ms` for latency debugging.
