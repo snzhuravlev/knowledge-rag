@@ -1,6 +1,7 @@
 from typing import AsyncGenerator, List
 
 from google import genai
+from google.genai.errors import ClientError
 
 from app.config import Settings
 from app.db.repositories import ChunkRepository
@@ -14,10 +15,19 @@ class RagService:
         self.client = client
 
     async def embed_query(self, text: str) -> List[float]:
-        response = self.client.models.embed_content(
-            model=self.settings.embedding_model,
-            contents=text,
-        )
+        model_name = self._normalize_model_name(self.settings.embedding_model)
+        try:
+            response = self.client.models.embed_content(
+                model=model_name,
+                contents=text,
+            )
+        except ClientError as exc:
+            if exc.code == 404:
+                raise RuntimeError(
+                    f"Embedding model '{model_name}' not found. "
+                    "Set EMBEDDING_MODEL to a valid model, e.g. 'text-embedding-004'."
+                ) from exc
+            raise
         embedding = getattr(response, "embeddings", None)
         if not embedding:
             raise RuntimeError("Embedding model did not return embeddings.")
@@ -47,8 +57,9 @@ class RagService:
         )
 
     async def generate_answer(self, prompt: str) -> str:
+        model_name = self._normalize_model_name(self.settings.generation_model)
         response = self.client.models.generate_content(
-            model=self.settings.generation_model,
+            model=model_name,
             contents=prompt,
         )
         text_parts: List[str] = []
@@ -65,8 +76,9 @@ class RagService:
         return "\n".join(text_parts).strip()
 
     async def generate_answer_stream(self, prompt: str) -> AsyncGenerator[str, None]:
+        model_name = self._normalize_model_name(self.settings.generation_model)
         stream = self.client.models.generate_content_stream(
-            model=self.settings.generation_model,
+            model=model_name,
             contents=prompt,
         )
         async for event in stream:
@@ -78,3 +90,8 @@ class RagService:
                     value = getattr(sub, "text", None)
                     if isinstance(value, str) and value:
                         yield value
+
+    @staticmethod
+    def _normalize_model_name(model_name: str) -> str:
+        # Keep backward compatibility with older docs that used "google/<model>".
+        return model_name.split("/", 1)[1] if model_name.startswith("google/") else model_name

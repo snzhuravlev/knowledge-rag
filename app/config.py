@@ -59,7 +59,7 @@ def load_settings() -> Settings:
             raise RuntimeError(f"{env_name} contains invalid SQL identifier.")
         return value
 
-    cors_env = os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000")
+    cors_env = os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:8008,http://localhost:8008")
     cors_origins = tuple(origin.strip() for origin in cors_env.split(",") if origin.strip())
     if not cors_origins:
         raise RuntimeError("CORS_ALLOW_ORIGINS must contain at least one origin.")
@@ -80,8 +80,8 @@ def load_settings() -> Settings:
         metadata_column=validated_identifier("RAG_METADATA_COLUMN", "metadata"),
         vector_dim=int(os.getenv("RAG_VECTOR_DIM", "768")),
         similarity_metric=os.getenv("RAG_SIMILARITY_METRIC", "cosine"),
-        embedding_model=os.getenv("EMBEDDING_MODEL", "google/text-embedding-004"),
-        generation_model=os.getenv("GENERATION_MODEL", "google/gemini-flash-latest"),
+        embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-004"),
+        generation_model=os.getenv("GENERATION_MODEL", "gemini-1.5-flash"),
         auth_secret_key=auth_secret_key,
         auth_algorithm=os.getenv("AUTH_ALGORITHM", "HS256"),
         access_token_expire_minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60")),

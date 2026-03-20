@@ -5,8 +5,8 @@ Minimalist web interface for a local RAG system:
 - Backend: FastAPI + asyncpg + PostgreSQL with pgvector.
 - Modular backend: routes + services + repositories + centralized app state.
 - Chunk storage in the `knowledge_base` table.
-- Embeddings: `google/text-embedding-004`.
-- Answer generation: `google/gemini-flash-latest`.
+- Embeddings: `text-embedding-004`.
+- Answer generation: `gemini-1.5-flash`.
 - Web UI: Tailwind, chat + sources list, streaming answers.
 - User roles: `admin`, `reader`.
 
@@ -60,6 +60,7 @@ Core settings are loaded from environment variables in `app/config.py`.
 - `RAG_CONTENT_COLUMN`, `RAG_SOURCE_COLUMN`, `RAG_EMBEDDING_COLUMN`, `RAG_METADATA_COLUMN` — column mapping for RAG reads/writes.
 - `RAG_VECTOR_DIM` (default `768`) and `RAG_SIMILARITY_METRIC` (`cosine` or `inner_product`) — retrieval behavior.
 - `EMBEDDING_MODEL`, `GENERATION_MODEL` — model IDs for embeddings and generation.
+  - Examples: `text-embedding-004`, `gemini-1.5-flash`.
 - `AUTH_SECRET_KEY`, `AUTH_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` — JWT settings.
 - `UPLOAD_DIR` — where uploaded files are stored before indexing.
 - `LOG_LEVEL`, `LOG_FORMAT` — application logging verbosity/format.
